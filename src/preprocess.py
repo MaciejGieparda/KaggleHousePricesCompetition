@@ -1,8 +1,9 @@
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
+from sklearn.preprocessing import OrdinalEncoder
 
-def preprocess(df: pd.DataFrame, is_train=True, label_encoders=None):
-    """Preprocess the dataset (both train and test) consistently."""
+def preprocess(df: pd.DataFrame, is_train=True, ordinal_encoder=None, cat_cols=None):
+    """Preprocess the dataset using OrdinalEncoder for consistent categorical handling."""
 
     # Define columns where NaN means 'None' or 0
     none_cols = [
@@ -27,23 +28,23 @@ def preprocess(df: pd.DataFrame, is_train=True, label_encoders=None):
     df['HasFireplace'] = (df['FireplaceQu'] != 'None').astype(int)
     df['HasFence'] = (df['Fence'] != 'None').astype(int)
 
-    # Impute LotFrontage by median per Neighborhood (only for training set)
+    # Impute LotFrontage by median per Neighborhood
     if 'LotFrontage' in df.columns and 'Neighborhood' in df.columns:
         df['LotFrontage'] = df.groupby('Neighborhood')['LotFrontage'].transform(
             lambda x: x.fillna(x.median())
         )
 
-    # Encode categoricals
     if is_train:
-        label_encoders = {}
-        cat_cols = df.select_dtypes(include='object').columns
-        for col in cat_cols:
-            le = LabelEncoder()
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
-        return df, label_encoders
+        cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+        df[cat_cols] = df[cat_cols].astype(str)
+
+        encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+        df[cat_cols] = encoder.fit_transform(df[cat_cols]).astype(np.float32)
+        return df, encoder, cat_cols
     else:
-        for col, le in label_encoders.items():
-            if col in df.columns:
-                df[col] = le.transform(df[col].fillna('None'))
+        if cat_cols is None:
+            cat_cols = ordinal_encoder.feature_names_in_.tolist()
+
+        df[cat_cols] = df[cat_cols].astype(str)
+        df[cat_cols] = ordinal_encoder.transform(df[cat_cols]).astype(np.float32)
         return df
